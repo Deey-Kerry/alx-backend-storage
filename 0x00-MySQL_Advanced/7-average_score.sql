@@ -1,0 +1,1 @@
+-- SQL script that creates a stored procedure ComputeAverageScoreForUser
