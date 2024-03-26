@@ -1,11 +1,11 @@
-#!/usr/bin/python3
-"""Python script that provides some stats """
-from pymongo
+#!/usr/bin/env python3
+"""Python script that provides some stats about Nginx logs"""
+import pymongo
 from pymongo import MongoClient
 
 
 def log_nginx_stats(mongo_collection):
-    """Log stats about Nginx"""
+    """provides some stats about Nginx logs"""
     print(f"{mongo_collection.estimated_document_count()} logs")
 
     print("Methods:")

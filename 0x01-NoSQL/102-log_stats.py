@@ -1,11 +1,11 @@
-#!/usr/bin/python3
-"""adding the top 10 of the most present IPs in the collection"""
+#!/usr/bin/env python3
+"""Improve 12-log_stats.py"""
 from pymongo import MongoClient
 
 
 def print_nginx_request_logs(nginx_collection):
     """
-    Prints Nginx request logs
+    Print nginx request by adding the top 10
     """
     print('{} logs'.format(nginx_collection.count_documents({})))
     print('Methods:')
@@ -21,7 +21,7 @@ def print_nginx_request_logs(nginx_collection):
 
 def print_top_ips(server_collection):
     """
-    Prints top ips 
+    Prints the top 10 HTTP IP
     """
     print('IPs:')
     request_logs = server_collection.aggregate(
@@ -45,7 +45,7 @@ def print_top_ips(server_collection):
 
 def run():
     """
-    Runs a function in MongoDB.
+    Runs stats about Nginx logs
     """
     client = MongoClient('mongodb://127.0.0.1:27017')
     print_nginx_request_logs(client.logs.nginx)
