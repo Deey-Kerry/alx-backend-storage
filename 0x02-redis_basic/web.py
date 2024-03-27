@@ -1,41 +1,44 @@
 #!/usr/bin/env python3
-"""web task"""
+"""get_page track how many times a particular URL was accessed in the key "count:{url}" and cache the result with an expiration time of 10 seconds.
+
+Tip: Use http://slowwly.robertomurray.co.uk to simulate a slow response and test your caching.
+"""
+
+
+import redis
 import requests
-import time
 from functools import wraps
 
-CACHE = {}
+r = redis.Redis()
 
-def cache_with_expiry(expiration_time):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(url):
-            current_time = time.time()
-            if url in CACHE and current_time - CACHE[url]["timestamp"] < expiration_time:
-                CACHE[url]["count"] += 1
-                print(f"Cache hit for {url}, accessed {CACHE[url]['count']} times.")
-                return CACHE[url]["content"]
-            else:
-                content = func(url)
-                CACHE[url] = {"content": content, "timestamp": current_time, "count": 1}
-                print(f"Cache miss for {url}.")
-                return content
-        return wrapper
-    return decorator
 
-@cache_with_expiry(10)
-def get_page(url):
-    response = requests.get(url)
-    return response.text
+def url_access_count(method):
+    """decorator for get_page function"""
+    @wraps(method)
+    def wrapper(url):
+        """wrapper function"""
+        key = "cached:" + url
+        cached_value = r.get(key)
+        if cached_value:
+            return cached_value.decode("utf-8")
 
-# Testing the function
+            # Get new content and update cache
+        key_count = "count:" + url
+        html_content = method(url)
+
+        r.incr(key_count)
+        r.set(key, html_content, ex=10)
+        r.expire(key, 10)
+        return html_content
+    return wrapper
+
+
+@url_access_count
+def get_page(url: str) -> str:
+    """obtain the HTML content of a particular"""
+    results = requests.get(url)
+    return results.text
+
+
 if __name__ == "__main__":
-    # Testing with a slow response URL
-    slow_url = "http://slowwly.robertomurray.co.uk/delay/5000/url/http://www.example.com"
-    print(get_page(slow_url))  # This should take some time due to the slow response
-    print(get_page(slow_url))  # This should be faster due to caching
-    
-    # Testing with a regular URL
-    regular_url = "http://www.example.com"
-    print(get_page(regular_url))  # This should be fetched and displayed
-    print(get_page(regular_url))  # This should be faster due to caching
+    get_page('http://slowwly.robertomurray.co.uk')
