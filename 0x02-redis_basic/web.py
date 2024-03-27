@@ -1,30 +1,39 @@
 #!/usr/bin/env python3
-"""implement a get_page function (prototype: """
+"""new function that the decorator will return, use rpush to append the input arguments. Remember that Redis can only store strings, bytes and numbers. Therefore, we can simply use str(args) to normalize. We can ignore potential kwargs for now
+"""
+import redis
 import requests
-import time
-from functools import lru_cache
-url_access_count = {}
+from functools import wraps
+r = redis.Redis()
 
 
-def cache_and_track(func):
-    @lru_cache(maxsize=100)
+def url_access_count(method):
+    """Url access that counts"""
+    @wraps(method)
     def wrapper(url):
-        response = requests.get(url)
-        page_content = response.text
-        url_access_count[url] = url_access_count.get(url, 0) + 1
-        time.sleep(10)
-        return page_content
+        """Wraps function"""
+        key = "cached:" + url
+        cached_value = r.get(key)
+        if cached_value:
+            return cached_value.decode("utf-8")
+
+
+        key_count = "count:" + url
+        html_content = method(url)
+
+        r.incr(key_count)
+        r.set(key, html_content, ex=10)
+        r.expire(key, 10)
+        return html_content
     return wrapper
 
 
-@cache_and_track
+@url_access_count
 def get_page(url: str) -> str:
-    return url
+    """Function that gets page"""
+    results = requests.get(url)
+    return results.text
 
 
 if __name__ == "__main__":
-    url_ = "http://slowwly.robertomurray.co.uk/delay/1000/url/"
-    url = f"{url_}http://www.google.com"
-    print(get_page(url))
-    print(get_page(url))
-    print(f"Access count for {url}: {url_access_count[url]}")
+    get_page('http://slowwly.robertomurray.co.uk')
