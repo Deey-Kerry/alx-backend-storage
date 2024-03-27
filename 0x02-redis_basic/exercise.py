@@ -1,65 +1,101 @@
 #!/usr/bin/env python3
-"""Redis Exercises combined"""
-import sys
-from typing import Union, Callable, Optional
-from uuid import uuid4
+"""
+redis tasks both the exercises.py and web.py
+"""
 import redis
-from functools import wraps
-UnionOfTypes = Union[str, bytes, int, float]
+import uuid
+import functools
+from typing import Union, Callable, Optional
+
+
+def replay(method: Callable) -> None:
+    """
+    Function that replays the history of calls
+    """
+    r = method.__self__._redis
+    qualname = method.__qualname__
+    inputs_key = f"{qualname}:inputs"
+    outputs_key = f"{qualname}:outputs"
+
+    num_calls = r.get(qualname)
+    if num_calls:
+        num_calls = num_calls.decode('utf-8')
+    else:
+        num_calls = '0'
+
+    inputs = r.lrange(inputs_key, 0, -1)
+    outputs = r.lrange(outputs_key, 0, -1)
+
+    print(f"{qualname} was called {num_calls} times:")
+
+    for input_, output in zip(inputs, outputs):
+        input_ = input_.decode('utf-8')
+        output = output.decode('utf-8')
+        print(f"{qualname}(*{input_}) -> {output}")
 
 
 def count_calls(method: Callable) -> Callable:
-    """counting number of times cache class called"""
-    key = method.__qualname__
-    @wraps(method)
+    """Function that Count calls
+    """
+    @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
-        """Wrapper method"""
+        """wraps arguements"""
+        key = method.__qualname__
         self._redis.incr(key)
         return method(self, *args, **kwargs)
     return wrapper
 
 
 def call_history(method: Callable) -> Callable:
-    """store the history of inputs and outputs for a particular function"""
-    key = method.__qualname__
-    input_i = "".join([key, ":inputs"])
-    output = "".join([key, ":outputs"])
-    @wraps(method)
+    """ Function that calls history
+    """
+    @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
-        """Wrapper method"""
-        self._redis.rpush(input_i, str(args))
-        out = method(self, *args, **kwargs)
-        self._redis.rpush(output, str(out))
-        return out
+        """wraps arguements"""
+        input_key = method.__qualname__ + ":inputs"
+        output_key = method.__qualname__ + ":outputs"
+
+        self._redis.rpush(input_key, str(args))
+        result = method(self, *args, **kwargs)
+        self._redis.rpush(output_key, str(result))
+
+        return result
     return wrapper
 
 
 class Cache:
-    """Writing strings to Redis"""
-    def __init__(self):
-        """ store an instance of the Redis client as a private variable"""
+    """Cache class that is for initializing
+    """
+    def __init__(self) -> None:
+        """Initialize redis """
         self._redis = redis.Redis()
         self._redis.flushdb()
 
     @count_calls
     @call_history
-    def store(self, data: UnionOfTypes) -> str:
-        """method should generate a random key (e.g. using uuid), store
-        the input data in Redis using the random key and return the key"""
-        key = str(uuid4())
-        self._redis.mset({key: data})
+    def store(self, data: Union[str, bytes, int, float]) -> str:
+        """stores string """
+        key = str(uuid.uuid4())
+        if isinstance(data, (int, float)):
+            data = str(data)
+        self._redis.set(name=key, value=data)
         return key
 
-    def get(self, key: str, fn: Optional[Callable] = None) -> UnionOfTypes:
-        """convert the data back to the desired format"""
+    def get(self, key: str, fn: Optional[Callable] =
+            None) -> Union[str, bytes, int, float]:
+        """get union """
+        value = self._redis.get(name=key)
+        if value is None:
+            return value
         if fn:
-            return fn(self._redis.get(key))
-        return self._redis.get(key)
+            return fn(value)
+        return value
 
-    def get_int(self: bytes) -> int:
-        """parametrize Cache.get with the correct conversion function"""
-        return int.from_bytes(self, sys.byteorder)
+    def get_str(self, key: str) -> Optional[str]:
+        """get string """
+        return self.get(key, fn=lambda x: x.decode('utf-8'))
 
-    def get_str(self: bytes) -> str:
-        """parametrize Cache.get with the correct conversion function."""
-        return self.decode("utf-8")
+    def get_int(self, key: str) -> Optional[int]:
+        """get integer """
+        value = self.get(key)
+        return int(value) if value else None
