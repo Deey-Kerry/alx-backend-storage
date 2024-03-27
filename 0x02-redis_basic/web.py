@@ -1,42 +1,36 @@
 #!/usr/bin/env python3
-
+"""
+Caching request module
+"""
+import redis
 import requests
-import time
-from functools import lru_cache
+from functools import wraps
+from typing import Callable
 
 
-# Dictionary to track URL accesses
-url_access_count = {}
-
-
-# Decorator to cache results and track URL accesses
-def cache_and_track(func):
-    @lru_cache(maxsize=100)
-    def wrapper(url):
-        # Make the request to the URL and fetch the content
-        response = requests.get(url)
-        page_content = response.text
-
-        # Update the URL access count
-        url_access_count[url] = url_access_count.get(url, 0) + 1
-
-        time.sleep(10)  # Simulate slow response
-
-        return page_content
-
+def track_get_page(fn: Callable) -> Callable:
+    """ Decorator for get_page
+    """
+    @wraps(fn)
+    def wrapper(url: str) -> str:
+        """ Wrapper that:
+            - check whether a url's data is cached
+            - tracks how many times get_page is called
+        """
+        client = redis.Redis()
+        client.incr(f'count:{url}')
+        cached_page = client.get(f'{url}')
+        if cached_page:
+            return cached_page.decode('utf-8')
+        response = fn(url)
+        client.set(f'{url}', response, 10)
+        return response
     return wrapper
 
 
-# Function to get the page content (decorated with cache_and_track)
-@cache_and_track
+@track_get_page
 def get_page(url: str) -> str:
-    return url
-
-
-# Example usage
-if __name__ == "__main__":
-    url_ = "http://slowwly.robertomurray.co.uk/delay/1000/url/"
-    url = f"{url_}http://www.google.com"
-    print(get_page(url))
-    print(get_page(url))
-    print(f"Access count for {url}: {url_access_count[url]}")
+    """ Makes a http request to a given endpoint
+    """
+    response = requests.get(url)
+    return response.text
