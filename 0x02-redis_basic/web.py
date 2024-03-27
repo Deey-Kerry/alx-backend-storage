@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+"""web task"""
 import requests
 import time
 from functools import wraps
