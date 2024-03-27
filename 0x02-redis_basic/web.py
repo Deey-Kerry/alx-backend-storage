@@ -1,37 +1,28 @@
-#!/usr/bin/env python3
-"""
-Caching request module with tracking and expiration time
-"""
-import redis
 import requests
+import time
 from functools import wraps
-from typing import Callable
 
-redis_client = redis.Redis()
+CACHE = {}
 
-def count_access_and_cache(expiration_time=10):
-    """Decorator to count the number of accesses to a URL and cache the content."""
+def cache_with_expiry(expiration_time):
     def decorator(func):
         @wraps(func)
-        def wrapper(url: str) -> str:
-            # Increment the access count for the URL
-            redis_client.incr(f"count:{url}")
-            # Attempt to get the cached content
-            cached_content = redis_client.get(url)
-            if cached_content:
-                return cached_content.decode('utf-8')
+        def wrapper(url):
+            current_time = time.time()
+            if url in CACHE and current_time - CACHE[url]["timestamp"] < expiration_time:
+                CACHE[url]["count"] += 1
+                print(f"Cache hit for {url}, accessed {CACHE[url]['count']} times.")
+                return CACHE[url]["content"]
             else:
-                # Fetch the page content as it's not cached
-                response = func(url)
-                # Cache the content with the specified expiration time
-                redis_client.setex(url, expiration_time, response)
-                return response
+                content = func(url)
+                CACHE[url] = {"content": content, "timestamp": current_time, "count": 1}
+                print(f"Cache miss for {url}.")
+                return content
         return wrapper
     return decorator
 
-@count_access_and_cache(expiration_time=10)
-def get_page(url: str) -> str:
-    """Makes a HTTP request to a given endpoint."""
+@cache_with_expiry(10)
+def get_page(url):
     response = requests.get(url)
     return response.text
 
