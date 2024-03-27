@@ -1,7 +1,3 @@
-#!/usr/bin/env python3
-"""
-Caching request module
-"""
 import redis
 import requests
 from functools import wraps
