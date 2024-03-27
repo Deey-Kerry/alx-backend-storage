@@ -1,41 +1,65 @@
 #!/usr/bin/env python3
-"""import redis"""
-
-
+"""Redis Exercises combined"""
+import sys
+from typing import Union, Callable, Optional
+from uuid import uuid4
 import redis
-import requests
 from functools import wraps
+UnionOfTypes = Union[str, bytes, int, float]
 
-r = redis.Redis()
 
-
-def url_access_count(method):
-    """decorator for get_page function"""
+def count_calls(method: Callable) -> Callable:
+    """counting number of times cache class called"""
+    key = method.__qualname__
     @wraps(method)
-    def wrapper(url):
-        """wrapper function"""
-        key = "cached:" + url
-        cached_value = r.get(key)
-        if cached_value:
-            return cached_value.decode("utf-8")
-
-            # Get new content and update cache
-        key_count = "count:" + url
-        html_content = method(url)
-
-        r.incr(key_count)
-        r.set(key, html_content, ex=10)
-        r.expire(key, 10)
-        return html_content
+    def wrapper(self, *args, **kwargs):
+        """Wrapper method"""
+        self._redis.incr(key)
+        return method(self, *args, **kwargs)
     return wrapper
 
 
-@url_access_count
-def get_page(url: str) -> str:
-    """obtain the HTML content of a particular"""
-    results = requests.get(url)
-    return results.text
+def call_history(method: Callable) -> Callable:
+    """store the history of inputs and outputs for a particular function"""
+    key = method.__qualname__
+    input_i = "".join([key, ":inputs"])
+    output = "".join([key, ":outputs"])
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        """Wrapper method"""
+        self._redis.rpush(input_i, str(args))
+        out = method(self, *args, **kwargs)
+        self._redis.rpush(output, str(out))
+        return out
+    return wrapper
 
 
-if __name__ == "__main__":
-    get_page('http://slowwly.robertomurray.co.uk')
+class Cache:
+    """Writing strings to Redis"""
+    def __init__(self):
+        """ store an instance of the Redis client as a private variable"""
+        self._redis = redis.Redis()
+        self._redis.flushdb()
+
+    @count_calls
+    @call_history
+    def store(self, data: UnionOfTypes) -> str:
+        """method should generate a random key (e.g. using uuid), store
+        the input data in Redis using the random key and return the key"""
+        key = str(uuid4())
+        self._redis.mset({key: data})
+        return key
+
+    def get(self, key: str, fn: Optional[Callable] = None) -> UnionOfTypes:
+        """convert the data back to the desired format"""
+        if fn:
+            return fn(self._redis.get(key))
+        return self._redis.get(key)
+
+    def get_int(self: bytes) -> int:
+        """parametrize Cache.get with the correct conversion function"""
+        return int.from_bytes(self, sys.byteorder)
+
+    def get_str(self: bytes) -> str:
+        """parametrize Cache.get with the correct conversion function."""
+        return self.decode("utf-8")
